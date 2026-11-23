@@ -1,0 +1,26 @@
+AT+WMODE=STA
+AT+WSTA=OPPO K11,yiyi1123
+AT+SOCK=MQTT,192.168.143.1,1883
+配置使用
+mqtt.heclouds.com
+AT+MQTTV=4
+为 mqtt 域名服务器，6002 为端口号，用户可以自行更改
+设置 mqtt 版本为 4
+AT+MQTTK=60
+设置 mqtt 心跳包时间为 60 秒
+AT+MQTTSUBQOS=2
+设置 mqt 订阅消息质量为 2
+AT+MQTTPUBQOS=2
+设置 mqtt 推送消息质量为 2
+AT+MQTTCID= （客户端ID）
+设置 mqtt clentid
+AT+MQTTUSERNAME= （客户端ID对应的username）
+HC-25 用户手册—AT 指令集 广州汇承信息科技有限公司
+http://www.hc01.com
+第 16页
+设置 mqtt username
+AT+MQTTPASSWORD=（对应的密码）
+设置 mqtt password
+AT+MQTTSUBTOPIC=iotmsg/sensor
+设置 mqtt 订阅消息主题
+AT+MQTTPUBTOPIC=iotmsg/sensor

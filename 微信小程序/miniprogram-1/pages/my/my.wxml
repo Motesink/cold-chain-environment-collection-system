@@ -1,0 +1,54 @@
+<view class="container">
+  <!-- 紧凑的头部 -->
+  <view class="compact-header">
+    <picker mode="date" value="{{selectedDate}}" start="2020-01-01" end="{{endDate}}" bindchange="handleDateChange">
+      <view class="date-picker">{{selectedDate}}</view>
+    </picker>
+    <button size="mini" bindtap="toggleLoading" class="refresh-btn {{isLoading ? 'active' : ''}}">
+      {{isLoading ? '停止' : '刷新'}}
+    </button>
+  </view>
+  
+  <!-- 紧凑的阈值设置 -->
+  <view class="compact-threshold">
+    <view class="threshold-row">
+      <text class="threshold-label">温度阈值(℃):</text>
+      <input class="threshold-input" type="number" placeholder="最低" value="{{threshold.tempMin}}" bindinput="updateThreshold" data-field="tempMin" />
+      <text class="threshold-separator">-</text>
+      <input class="threshold-input" type="number" placeholder="最高" value="{{threshold.tempMax}}" bindinput="updateThreshold" data-field="tempMax" />
+    </view>
+    <view class="threshold-row">
+      <text class="threshold-label">湿度阈值(%):</text>
+      <input class="threshold-input" type="number" placeholder="最低" value="{{threshold.humiMin}}" bindinput="updateThreshold" data-field="humiMin" />
+      <text class="threshold-separator">-</text>
+      <input class="threshold-input" type="number" placeholder="最高" value="{{threshold.humiMax}}" bindinput="updateThreshold" data-field="humiMax" />
+    </view>
+    <!-- 应用按钮居中 -->
+    <view class="apply-btn-wrapper">
+      <button size="mini" bindtap="setThreshold" class="apply-btn active">应用阈值</button>
+    </view>
+  </view>
+  
+  <!-- 调整后的图表容器 -->
+  <view class="charts-container">
+    <view class="chart-wrapper">
+      <text class="chart-title">温度变化曲线</text>
+      <ec-canvas 
+        id="temp-chart" 
+        canvas-id="temp-chart" 
+        ec="{{ tempEc }}"
+        force-use-old-canvas="true">
+      </ec-canvas>
+    </view>
+    
+    <view class="chart-wrapper">
+      <text class="chart-title">湿度变化曲线</text>
+      <ec-canvas 
+        id="humi-chart" 
+        canvas-id="humi-chart" 
+        ec="{{ humiEc }}"
+        force-use-old-canvas="true">
+      </ec-canvas>
+    </view>
+  </view>
+</view>

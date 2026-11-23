@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>传感器数据监控</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .current-data {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .sensor-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #007bff;
+        }
+
+        .sensor-card h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .sensor-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .sensor-card .unit {
+            color: #666;
+            margin-left: 5px;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            height: 450px;
+            position: relative;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        select, input[type="date"] {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        input[type="date"] {
+            min-width: 150px;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 100px;
+        }
+
+        .connected {
+            background: #28a745;
+            color: white;
+        }
+
+        .disconnected {
+            background: #dc3545;
+            color: white;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .status-text {
+            text-align: center;
+            flex-grow: 1; /* 让文字占据剩余空间 */
+        }
+
+        .connected .status-indicator {
+            background: #28a745;
+        }
+
+        .disconnected .status-indicator {
+            background: #dc3545;
+        }
+
+        .timestamp {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        #data-chart {
+            max-height: 350px;
+            width: 100% !important;
+        }
+
+        .data-count {
+            color: #666;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+
+        .date-range-info {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+        }
+
+        .data-source {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 连接状态指示器 -->
+        <div id="connection-status" class="connection-status disconnected">
+            <span class="status-indicator"></span>
+            <span id="status-text" class="status-text">未连接</span>
+        </div>
+
+        <!-- 当前数据展示 -->
+        <div class="current-data">
+            <h2>当前传感器数据</h2>
+            <div id="current-data" class="sensor-grid">
+                <!-- 传感器数据将通过JavaScript动态填充 -->
+            </div>
+            <div id="last-update" class="timestamp"></div>
+        </div>
+
+        <!-- 图表区域 -->
+        <div class="chart-container">
+            <div class="chart-header">
+                <h2>历史数据趋势图 <span id="data-count" class="data-count">(0条数据)</span></h2>
+                <div class="controls">
+                    <select id="chart-type">
+                        <option value="all">所有数据</option>
+                        <option value="ds18b20_temp">DS18B20温度</option>
+                        <option value="dht11_temp">DHT11温度</option>
+                        <option value="dht11_humidity">DHT11湿度</option>
+                    </select>
+                    <select id="time-range">
+                        <option value="10">最近10条</option>
+                        <option value="20">最近20条</option>
+                        <option value="50" selected>最近50条</option>
+                        <option value="100">最近100条</option>
+                        <option value="all">全部数据</option>
+                    </select>
+                    <input type="date" id="date-selector">
+                </div>
+            </div>
+            <div id="data-source" class="data-source">数据日期: <span id="current-date-display"></span></div>
+            <div id="date-range-info" class="date-range-info"></div>
+            <canvas id="data-chart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // WebSocket连接
+        let socket = null;
+        let chart = null;
+        let allHistoricalData = []; // 存储所有历史数据
+        let displayHistoricalData = []; // 当前显示的历史数据
+        let currentData = {};
+
+        // 获取今天的日期，格式为YYYY-MM-DD
+        function getTodayDate() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        // 获取今天的中文日期格式
+        function getTodayChineseDate() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            return `${year}年${month}月${day}日`;
+        }
+
+        // 将中文日期格式转换为YYYY-MM-DD格式
+        function formatChineseDateToISO(chineseDate) {
+            if (!chineseDate) return '';
+            // 格式如 "2026年01月04日" -> "2026-01-04"
+            const match = chineseDate.match(/(\d{4})年(\d{2})月(\d{2})日/);
+            if (match) {
+                return `${match[1]}-${match[2]}-${match[3]}`;
+            }
+            return '';
+        }
+
+        // 将ISO日期格式转换为中文格式
+        function formatISODateToChinese(isoDate) {
+            if (!isoDate) return '';
+            // 格式如 "2026-01-04" -> "2026年01月04日"
+            const parts = isoDate.split('-');
+            if (parts.length === 3) {
+                return `${parts[0]}年${parts[1]}月${parts[2]}日`;
+            }
+            return isoDate;
+        }
+
+        // 转换时间字符串格式：将"10时05分12秒"转换为"10:05:12"
+        function formatTimeString(timeStr) {
+            if (!timeStr) return '';
+            // 将中文时间格式转换为标准时间格式
+            return timeStr.replace('时', ':').replace('分', ':').replace('秒', '');
+        }
+
+        // 时间字符串转Date对象
+        function timeStrToDate(dateStr, timeStr) {
+            if (!dateStr || !timeStr) return new Date();
+
+            try {
+                // 解析日期部分，格式如 "2026年01月04日"
+                const dateMatch = dateStr.match(/(\d{4})年(\d{2})月(\d{2})日/);
+                if (!dateMatch) return new Date();
+
+                // 解析时间部分，格式如 "10:05:12" 或 "10时05分12秒"
+                const cleanTimeStr = timeStr.replace('时', ':').replace('分', ':').replace('秒', '');
+                const timeParts = cleanTimeStr.split(':');
+
+                if (timeParts.length >= 3) {
+                    const year = parseInt(dateMatch[1]);
+                    const month = parseInt(dateMatch[2]) - 1; // JavaScript月份从0开始
+                    const day = parseInt(dateMatch[3]);
+                    const hours = parseInt(timeParts[0]) || 0;
+                    const minutes = parseInt(timeParts[1]) || 0;
+                    const seconds = parseInt(timeParts[2]) || 0;
+
+                    return new Date(year, month, day, hours, minutes, seconds);
+                }
+            } catch (e) {
+                console.error('时间解析错误:', e);
+            }
+            return new Date();
+        }
+
+        // 请求特定日期的数据
+        function requestDateData(dateStr) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'request_date_data',
+                    date: dateStr
+                }));
+                console.log('请求日期数据:', dateStr);
+            } else {
+                console.log('WebSocket未连接，无法请求日期数据');
+            }
+        }
+
+        // 初始化连接
+        function initWebSocket() {
+            // 获取当前URL的主机和协议，构建WebSocket URL
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            const wsUrl = `${protocol}//${host}/ws/data/`;
+            console.log('连接URL:', wsUrl);
+
+            socket = new WebSocket(wsUrl);
+
+            // 连接建立
+            socket.onopen = function(e) {
+                console.log('WebSocket连接已建立');
+                updateConnectionStatus(true);
+
+                // 发送订阅请求
+                socket.send(JSON.stringify({
+                    type: 'subscribe',
+                    subscription_type: 'all'
+                }));
+
+                // 请求今天的数据
+                const todayDate = getTodayDate();
+                requestDateData(todayDate);
+
+                // 发送心跳包
+                setInterval(() => {
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: 'ping' }));
+                    }
+                }, 30000);
+            };
+
+            // 接收消息
+            socket.onmessage = function(e) {
+                try {
+                    const data = JSON.parse(e.data);
+                    console.log('收到消息类型:', data.type);
+
+                    switch(data.type) {
+                        case 'connection_established':
+                            console.log('连接已建立:', data.message);
+                            break;
+                        case 'sensor_data':
+                            handleSensorData(data.data);
+                            break;
+                        case 'historical_data':
+                            handleHistoricalData(data.data);
+                            break;
+                        case 'date_data':
+                            handleDateData(data.data, data.date);
+                            break;
+                        case 'subscription_confirmation':
+                            console.log('订阅确认:', data.message);
+                            break;
+                        case 'pong':
+                            console.log('收到心跳响应');
+                            break;
+                        case 'error':
+                            console.error('错误:', data.message);
+                            break;
+                        default:
+                            console.log('收到消息:', data);
+                    }
+                } catch (error) {
+                    console.error('解析消息失败:', error);
+                }
+            };
+
+            // 连接关闭
+            socket.onclose = function(e) {
+                console.log('WebSocket连接关闭');
+                updateConnectionStatus(false);
+                // 5秒后尝试重连
+                setTimeout(initWebSocket, 5000);
+            };
+
+            // 错误处理
+            socket.onerror = function(error) {
+                console.error('WebSocket错误:', error);
+                updateConnectionStatus(false);
+            };
+        }
+
+        // 更新连接状态显示
+        function updateConnectionStatus(connected) {
+            const statusElement = document.getElementById('connection-status');
+            const statusText = document.getElementById('status-text');
+
+            if (connected) {
+                statusElement.className = 'connection-status connected';
+                statusText.textContent = '已连接';
+            } else {
+                statusElement.className = 'connection-status disconnected';
+                statusText.textContent = '未连接';
+            }
+        }
+
+        // 处理传感器数据
+        function handleSensorData(sensorData) {
+            // 更新当前数据
+            currentData = sensorData;
+
+            // 更新当前数据展示
+            updateCurrentDataDisplay(sensorData);
+
+            // 转换为图表需要的数据格式
+            const chartDataPoint = {
+                timestamp: timeStrToDate(sensorData.date, sensorData.time),
+                date: sensorData.date,
+                time: sensorData.time,
+                timeStr: formatTimeString(sensorData.time) || new Date().toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                }),
+                ds18b20_temp: parseFloat(sensorData.ds18b20_temp) || 0,
+                dht11_temp: parseFloat(sensorData.dht11_temp) || 0,
+                dht11_humidity: parseFloat(sensorData.dht11_humidity) || 0
+            };
+
+            // 添加到所有历史数据数组
+            allHistoricalData.push(chartDataPoint);
+
+            // 保持所有历史数据长度（最多保存1000条）
+            if (allHistoricalData.length > 1000) {
+                allHistoricalData.shift(); // 移除最旧的数据
+            }
+
+            // 确保数据按时间正序排列
+            allHistoricalData.sort((a, b) => a.timestamp - b.timestamp);
+
+            // 根据当前选择更新显示数据
+            updateDisplayData();
+        }
+
+        // 处理历史数据（默认数据）
+        function handleHistoricalData(data) {
+            // 将数据转换为图表格式
+            const newHistoricalData = data.map(item => {
+                const timestamp = timeStrToDate(item.date, item.time);
+                return {
+                    timestamp: timestamp,
+                    date: item.date,
+                    time: item.time,
+                    timeStr: formatTimeString(item.time) || timestamp.toLocaleTimeString('zh-CN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    }),
+                    ds18b20_temp: parseFloat(item.ds18b20_temp) || 0,
+                    dht11_temp: parseFloat(item.dht11_temp) || 0,
+                    dht11_humidity: parseFloat(item.dht11_humidity) || 0
+                };
+            });
+
+            // 按时间正序排列
+            newHistoricalData.sort((a, b) => a.timestamp - b.timestamp);
+
+            // 存储所有历史数据
+            allHistoricalData = newHistoricalData;
+
+            // 根据当前选择更新显示数据
+            updateDisplayData();
+        }
+
+        // 处理特定日期的数据
+        function handleDateData(data, dateStr) {
+            // 将数据转换为图表格式
+            const newHistoricalData = data.map(item => {
+                const timestamp = timeStrToDate(item.date, item.time);
+                return {
+                    timestamp: timestamp,
+                    date: item.date,
+                    time: item.time,
+                    timeStr: formatTimeString(item.time) || timestamp.toLocaleTimeString('zh-CN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    }),
+                    ds18b20_temp: parseFloat(item.ds18b20_temp) || 0,
+                    dht11_temp: parseFloat(item.dht11_temp) || 0,
+                    dht11_humidity: parseFloat(item.dht11_humidity) || 0
+                };
+            });
+
+            // 按时间正序排列
+            newHistoricalData.sort((a, b) => a.timestamp - b.timestamp);
+
+            // 存储所有历史数据
+            allHistoricalData = newHistoricalData;
+
+            // 根据当前选择更新显示数据
+            updateDisplayData();
+        }
+
+        // 更新显示数据（根据时间范围筛选）
+        function updateDisplayData() {
+            const maxLength = document.getElementById('time-range').value;
+            const selectedChineseDate = document.getElementById('current-date-display').textContent;
+
+            // 从所有历史数据中筛选出选定日期的数据
+            let filteredData = allHistoricalData.filter(item => item.date === selectedChineseDate);
+
+            // 如果选择的是"全部数据"，显示该日期的所有数据
+            if (maxLength === 'all') {
+                displayHistoricalData = filteredData;
+            } else {
+                // 否则按条数限制，取该日期的最近N条数据
+                const numRecords = parseInt(maxLength) || 50;
+                displayHistoricalData = filteredData.slice(-numRecords);
+            }
+
+            // 确保显示数据按时间正序排列
+            displayHistoricalData.sort((a, b) => a.timestamp - b.timestamp);
+
+            // 更新数据计数显示
+            const totalData = allHistoricalData.filter(item => item.date === selectedChineseDate).length;
+            document.getElementById('data-count').textContent = `(${displayHistoricalData.length}条数据，共${totalData}条)`;
+
+            // 更新日期范围信息
+            const dateRangeElement = document.getElementById('date-range-info');
+            if (displayHistoricalData.length > 0) {
+                const firstTime = displayHistoricalData[0].timeStr;
+                const lastTime = displayHistoricalData[displayHistoricalData.length - 1].timeStr;
+                dateRangeElement.textContent = `时间范围: ${firstTime} - ${lastTime}`;
+            } else {
+                dateRangeElement.textContent = `时间范围: 无数据`;
+            }
+
+            // 初始化或更新图表
+            if (!chart) {
+                initChart();
+            } else {
+                updateChart();
+            }
+        }
+
+        // 更新当前数据展示
+        function updateCurrentDataDisplay(data) {
+            const container = document.getElementById('current-data');
+            const timeElement = document.getElementById('last-update');
+
+            container.innerHTML = `
+                <div class="sensor-card">
+                    <h3>PIN_ID</h3>
+                    <div class="value">${data.pin_id || 'N/A'}</div>
+                </div>
+                <div class="sensor-card">
+                    <h3>ID</h3>
+                    <div class="value">${data.node_id || 'N/A'}</div>
+                </div>
+                <div class="sensor-card">
+                    <h3>DS18B20温度</h3>
+                    <div class="value">${data.ds18b20_temp || '0'}<span class="unit">°C</span></div>
+                </div>
+                <div class="sensor-card">
+                    <h3>DHT11温度</h3>
+                    <div class="value">${data.dht11_temp || '0'}<span class="unit">°C</span></div>
+                </div>
+                <div class="sensor-card">
+                    <h3>DHT11湿度</h3>
+                    <div class="value">${data.dht11_humidity || '0'}<span class="unit">%</span></div>
+                </div>
+                <div class="sensor-card">
+                    <h3>数据时间</h3>
+                    <div class="value">${data.date || 'N/A'} ${formatTimeString(data.time) || ''}</div>
+                </div>
+            `;
+
+            timeElement.textContent = `最后更新: ${new Date().toLocaleString('zh-CN')}`;
+        }
+
+        // 初始化图表
+        function initChart() {
+            const ctx = document.getElementById('data-chart').getContext('2d');
+
+            // 获取时间标签（使用完整的时间字符串）
+            const labels = displayHistoricalData.map(item => item.timeStr);
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'DS18B20温度',
+                            data: displayHistoricalData.map(item => item.ds18b20_temp),
+                            borderColor: '#ff6384',
+                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 3,
+                            pointHoverRadius: 5
+                        },
+                        {
+                            label: 'DHT11温度',
+                            data: displayHistoricalData.map(item => item.dht11_temp),
+                            borderColor: '#36a2eb',
+                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 3,
+                            pointHoverRadius: 5
+                        },
+                        {
+                            label: 'DHT11湿度',
+                            data: displayHistoricalData.map(item => item.dht11_humidity),
+                            borderColor: '#4bc0c0',
+                            backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            yAxisID: 'y1',
+                            pointRadius: 3,
+                            pointHoverRadius: 5
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 300
+                    },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: '时间'
+                            },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                callback: function(value, index, values) {
+                                    // 如果数据点太多，只显示部分标签
+                                    if (values.length > 10) {
+                                        return index % Math.ceil(values.length / 5) === 0 ? this.getLabelForValue(value) : '';
+                                    }
+                                    return this.getLabelForValue(value);
+                                }
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: '温度 (°C)'
+                            },
+                            suggestedMin: 0,
+                            suggestedMax: 50
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: '湿度 (%)'
+                            },
+                            suggestedMin: 0,
+                            suggestedMax: 100,
+                            grid: {
+                                drawOnChartArea: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title: function(tooltipItems) {
+                                    // 在tooltip中显示完整时间
+                                    const index = tooltipItems[0].dataIndex;
+                                    return displayHistoricalData[index].timeStr;
+                                },
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toFixed(1);
+                                        if (label.includes('温度')) {
+                                            label += ' °C';
+                                        } else if (label.includes('湿度')) {
+                                            label += ' %';
+                                        }
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 更新图表
+        function updateChart() {
+            if (!chart) return;
+
+            const chartType = document.getElementById('chart-type').value;
+
+            // 获取时间标签
+            const labels = displayHistoricalData.map(item => item.timeStr);
+
+            // 更新图表标签
+            chart.data.labels = labels;
+
+            // 更新数据集的数据
+            chart.data.datasets[0].data = displayHistoricalData.map(item => item.ds18b20_temp);
+            chart.data.datasets[1].data = displayHistoricalData.map(item => item.dht11_temp);
+            chart.data.datasets[2].data = displayHistoricalData.map(item => item.dht11_humidity);
+
+            // 根据选择的图表类型显示/隐藏数据集
+            const showAll = chartType === 'all';
+
+            // 设置每个数据集的可见性
+            chart.data.datasets[0].hidden = !showAll && chartType !== 'ds18b20_temp';
+            chart.data.datasets[1].hidden = !showAll && chartType !== 'dht11_temp';
+            chart.data.datasets[2].hidden = !showAll && chartType !== 'dht11_humidity';
+
+            // 更新图表
+            chart.update();
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 获取今天的日期
+            const todayDate = getTodayDate();
+            const todayChineseDate = getTodayChineseDate();
+
+            // 设置日期选择器的值为今天
+            document.getElementById('date-selector').value = todayDate;
+            document.getElementById('current-date-display').textContent = todayChineseDate;
+
+            // 初始化WebSocket连接
+            initWebSocket();
+
+            // 初始化默认显示
+            updateCurrentDataDisplay({
+                pin_id: '等待数据...',
+                node_id: '--',
+                ds18b20_temp: '--',
+                dht11_temp: '--',
+                dht11_humidity: '--',
+                time: '--',
+                date: '--'
+            });
+
+            // 绑定控制事件
+            document.getElementById('chart-type').addEventListener('change', updateChart);
+
+            document.getElementById('time-range').addEventListener('change', function() {
+                updateDisplayData();
+            });
+
+            document.getElementById('date-selector').addEventListener('change', function() {
+                // 更新日期显示
+                const isoDate = this.value;
+                const chineseDate = formatISODateToChinese(isoDate);
+                document.getElementById('current-date-display').textContent = chineseDate;
+
+                // 请求该日期的数据
+                requestDateData(isoDate);
+            });
+
+            // 页面可见性变化时重连
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden && (!socket || socket.readyState !== WebSocket.OPEN)) {
+                    console.log('页面恢复可见，重新连接WebSocket');
+                    initWebSocket();
+                }
+            });
+
+            // 窗口大小改变时重新绘制图表
+            window.addEventListener('resize', function() {
+                if (chart) {
+                    chart.resize();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

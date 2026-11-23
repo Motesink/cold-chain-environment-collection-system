@@ -1,0 +1,22 @@
+<!--index.wxml-->
+<view class="container">
+  <view wx:if="{{latestData}}" class="data-card">
+    <view>PIN_ID：{{latestData.pin_id}}</view>
+    <view>ID：{{latestData.node_id}}</view>
+    <view>DS18B20温度：{{latestData.ds18b20_temp}}℃</view>
+    <view>DHT11温度：{{latestData.dht11_temp}}℃</view>
+    <view>DHT11湿度：{{latestData.dht11_humi}}%</view>
+    <view>时间：{{latestData.formattedTime}}</view>
+  </view>
+  
+  <view wx:if="{{!latestData}}" class="no-data">
+    暂无数据
+  </view>
+
+  <button 
+    bindtap="toggleLoading" 
+    type="{{isLoading ? 'warn' : 'primary'}}"
+  >
+    {{isLoading ? '停止加载' : '加载数据'}}
+  </button>
+</view>

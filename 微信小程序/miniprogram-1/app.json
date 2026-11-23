@@ -1,0 +1,32 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/my/my"
+  ],
+  "window": {
+    "navigationBarTitleText": "功能演示",
+    "navigationBarBackgroundColor": "#0000FF",
+    "enablePullDownRefresh": true,
+    "backgroundColor": "#00FFFF",
+    "backgroundTextStyle": "light"
+  },
+  "style": "v2",
+  "tabBar": {
+  "selectedColor":"#b4282d",
+  "position": "bottom",
+  "list":[
+    {
+      "pagePath": "pages/index/index",
+      "text":"数据",
+      "iconPath": "images/data.png",
+      "selectedIconPath": "images/data_select.png"
+    },
+    {
+      "pagePath": "pages/my/my",
+      "text": "折线图",
+      "iconPath": "images/chart.png",
+      "selectedIconPath": "images/chart_select.png"
+    }
+  ]
+ } 
+}
